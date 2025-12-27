@@ -38,19 +38,23 @@ export const getTodayDeliveries = async (req, res) => {
     }
 
     // Formatar os dados para o frontend
-    const formattedRotas = (rotas || []).map(rota => {
-      // Calcular status baseado nos campos existentes (fallback visual)
-      // Agora o banco também terá o status correto salvo
-      let status = rota.status || 'pendente'; 
-      
-      // Mantemos a lógica de cálculo como garantia visual caso o campo status esteja nulo
-      if (rota.entregue === true) {
-        status = 'entregue';
-      } else if (rota.entregue === false && rota.motivo_nao_entrega) {
-        status = 'nao_entregue';
-      } else if (rota.horario_real && !rota.entregue) {
-        status = 'em_espera';
-      }
+  const formattedRotas = (rotas || []).map(rota => {
+    
+    // 1. Pega o status oficial do banco
+    let status = rota.status;
+
+    // 2. Só roda a lógica antiga SE o status vier vazio/nulo do banco
+    if (!status || status === 'pendente') {
+        if (rota.entregue === true) {
+            status = 'entregue';
+        } else if (rota.entregue === false && rota.motivo_nao_entrega) {
+            status = 'nao_entregue';
+        } else if (rota.horario_real && !rota.entregue) {
+            status = 'em_espera';
+        } else {
+            status = 'pendente';
+        }
+    }
 
       return {
         id: rota.id,
