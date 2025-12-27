@@ -7,6 +7,7 @@ import deliveryRoutes from './routes/deliveryRoutes.js'
 import loginRoutes from './routes/loginRoutes.js'
 import registerRoutes from './routes/registerRoutes.js'
 import routesRoutes from './routes/routesRoutes.js'
+import activityRoutes from './routes/activityRoutes.js'
 
 const app = express()
 const port = process.env.PORT || 3000
@@ -16,6 +17,7 @@ app.use(cors())
 app.use(express.json())
 
 // Rotas
+app.use('/activity', activityRoutes)
 app.use('/delivery', deliveryRoutes)
 app.use('/login', loginRoutes)
 app.use('/register', registerRoutes)

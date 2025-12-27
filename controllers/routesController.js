@@ -8,25 +8,6 @@ export const createRota = async (req, res) => {
   try {
     const { colaborador_id, cliente_id, data_entrega, horario_previsto, produtos, observacoes } = req.body
 
-    // 1. Antes de criar, descobrimos qual é a última sequência para este colaborador nesta data
-    const { data: lastRoute, error: searchError } = await supabase
-      .from('rotas')
-      .select('sequence')
-      .eq('colaborador_id', colaborador_id) // Filtra pelo entregador
-      .eq('data_entrega', data_entrega)     // Filtra pela data (para reiniciar a contagem noutro dia)
-      .order('sequence', { ascending: false }) // Pega o maior número
-      .limit(1)
-
-    if (searchError) {
-        console.error('Erro ao buscar sequência', searchError)
-        return res.status(400).json({ error: searchError })
-    }
-
-    // 2. Calculamos a nova sequência
-    // Se não achou nada (primeira entrega do dia), começa em 1. Se achou, soma 1.
-    const nextSequence = (lastRoute && lastRoute.length > 0) ? lastRoute[0].sequence + 1 : 1
-
-    // 3. Inserimos com o campo sequence preenchido
     const { data, error } = await supabase
       .from('rotas')
       .insert([
@@ -36,15 +17,13 @@ export const createRota = async (req, res) => {
           data_entrega,
           horario_previsto,
           produtos,
-          observacoes,
-          sequence: nextSequence // <--- CAMPO ADICIONADO AQUI
+          observacoes
         }
       ])
       .select()
 
     if (error) return res.status(400).json({ error })
     return res.status(201).json(data[0])
-
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Erro no servidor' })
@@ -282,5 +261,4 @@ export const getAnalyticsReport = async (req, res) => {
     console.error(error);
     return res.status(500).json({ error: 'Erro no servidor' });
   }
-
 }
