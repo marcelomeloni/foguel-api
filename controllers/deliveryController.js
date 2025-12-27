@@ -1,5 +1,49 @@
 import { supabase } from '../services/supabaseService.js';
 
+// ============== UTILITÁRIOS DE FUSO HORÁRIO ==============
+
+// Função para obter a data atual no fuso horário de Brasília
+const getBrazilianDate = () => {
+  const now = new Date();
+  // Convertendo para o fuso horário de Brasília (UTC-3)
+  const options = { timeZone: 'America/Sao_Paulo' };
+  return new Date(now.toLocaleString('en-US', options));
+};
+
+// Função para formatar data no formato YYYY-MM-DD em Brasília
+const getBrazilianDateString = () => {
+  const brazilianDate = getBrazilianDate();
+  const year = brazilianDate.getFullYear();
+  const month = String(brazilianDate.getMonth() + 1).padStart(2, '0');
+  const day = String(brazilianDate.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// Função para formatar hora no formato HH:MM:SS em Brasília
+const getBrazilianTimeString = () => {
+  const brazilianDate = getBrazilianDate();
+  const hours = String(brazilianDate.getHours()).padStart(2, '0');
+  const minutes = String(brazilianDate.getMinutes()).padStart(2, '0');
+  const seconds = String(brazilianDate.getSeconds()).padStart(2, '0');
+  return `${hours}:${minutes}:${seconds}`;
+};
+
+// Função para converter timestamp ISO para hora de Brasília
+const convertToBrazilianTime = (isoString) => {
+  if (!isoString) return null;
+  
+  const date = new Date(isoString);
+  const options = {
+    timeZone: 'America/Sao_Paulo',
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  };
+  
+  return date.toLocaleTimeString('pt-BR', options);
+};
+
 // ============== LISTAGEM DE ROTAS ==============
 
 // ➤ Listar rotas do dia atual para um colaborador específico
@@ -11,8 +55,8 @@ export const getTodayDeliveries = async (req, res) => {
       return res.status(400).json({ error: 'ID do colaborador é obrigatório' });
     }
 
-    // Obter data atual no formato YYYY-MM-DD
-    const today = new Date().toISOString().split('T')[0];
+    // Obter data atual no formato YYYY-MM-DD em Brasília
+    const today = getBrazilianDateString();
 
     const { data: rotas, error } = await supabase
       .from('rotas')
@@ -38,23 +82,27 @@ export const getTodayDeliveries = async (req, res) => {
     }
 
     // Formatar os dados para o frontend
-  const formattedRotas = (rotas || []).map(rota => {
-    
-    // 1. Pega o status oficial do banco
-    let status = rota.status;
+    const formattedRotas = (rotas || []).map(rota => {
+      
+      // 1. Pega o status oficial do banco
+      let status = rota.status;
 
-    // 2. Só roda a lógica antiga SE o status vier vazio/nulo do banco
-    if (!status || status === 'pendente') {
-        if (rota.entregue === true) {
-            status = 'entregue';
-        } else if (rota.entregue === false && rota.motivo_nao_entrega) {
-            status = 'nao_entregue';
-        } else if (rota.horario_real && !rota.entregue) {
-            status = 'em_espera';
-        } else {
-            status = 'pendente';
-        }
-    }
+      // 2. Só roda a lógica antiga SE o status vier vazio/nulo do banco
+      if (!status || status === 'pendente') {
+          if (rota.entregue === true) {
+              status = 'entregue';
+          } else if (rota.entregue === false && rota.motivo_nao_entrega) {
+              status = 'nao_entregue';
+          } else if (rota.horario_real && !rota.entregue) {
+              status = 'em_espera';
+          } else {
+              status = 'pendente';
+          }
+      }
+
+      // Converter horários salvos para exibição
+      const horario_real = rota.horario_real ? 
+        convertToBrazilianTime(rota.horario_real) : null;
 
       return {
         id: rota.id,
@@ -74,7 +122,9 @@ export const getTodayDeliveries = async (req, res) => {
         sequence: rota.sequence || 0,
         quem_recebeu: rota.quem_recebeu,
         motivo_nao_entrega: rota.motivo_nao_entrega,
-        horario_real: rota.horario_real
+        horario_real: horario_real,
+        created_at: rota.created_at ? 
+          convertToBrazilianTime(rota.created_at) : null
       };
     });
 
@@ -117,6 +167,14 @@ export const getDeliveryDetails = async (req, res) => {
     // Formatar endereço completo
     const enderecoCompleto = `${rota.clientes.rua}, ${rota.clientes.numero} - ${rota.clientes.bairro}, ${rota.clientes.cidade} - CEP ${rota.clientes.cep}`;
 
+    // Converter timestamps para horário de Brasília
+    const horario_real = rota.horario_real ? 
+      convertToBrazilianTime(rota.horario_real) : null;
+    const horario_chegada = rota.horario_chegada ? 
+      convertToBrazilianTime(rota.horario_chegada) : null;
+    const horario_saida = rota.horario_saida ? 
+      convertToBrazilianTime(rota.horario_saida) : null;
+
     const response = {
       id: rota.id,
       cliente: rota.clientes.nome,
@@ -135,9 +193,14 @@ export const getDeliveryDetails = async (req, res) => {
       observacoes: rota.observacoes,
       quem_recebeu: rota.quem_recebeu,
       motivo_nao_entrega: rota.motivo_nao_entrega,
-      horario_real: rota.horario_real,
+      horario_real: horario_real,
+      horario_chegada: horario_chegada,
+      horario_saida: horario_saida,
       tempo_espera: rota.tempo_espera,
-      created_at: rota.created_at,
+      created_at: rota.created_at ? 
+        convertToBrazilianTime(rota.created_at) : null,
+      updated_at: rota.updated_at ? 
+        convertToBrazilianTime(rota.updated_at) : null,
       sequence: rota.sequence || 0
     };
 
@@ -155,16 +218,17 @@ export const registerArrival = async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Obter horário atual
-    const now = new Date();
-    const horaAtual = now.toTimeString().split(' ')[0]; // Formato HH:MM:SS
+    // Obter horário atual em Brasília
+    const brazilianNow = getBrazilianDate();
+    const horaAtual = getBrazilianTimeString();
 
     const { data, error } = await supabase
       .from('rotas')
       .update({
         horario_real: horaAtual,
         horario_chegada: horaAtual,
-        status: 'em_espera' // <--- ATUALIZA STATUS NO BANCO
+        status: 'em_espera', // ATUALIZA STATUS NO BANCO
+        updated_at: brazilianNow.toISOString() // Salva timestamp completo em UTC
       })
       .eq('id', id)
       .select()
@@ -181,6 +245,7 @@ export const registerArrival = async (req, res) => {
       message: 'Chegada registrada com sucesso',
       horario_chegada: horaAtual,
       horario_real: horaAtual,
+      horario_brasilia: horaAtual,
       rota: data
     });
   } catch (error) {
@@ -194,6 +259,8 @@ export const cancelArrival = async (req, res) => {
   try {
     const { id } = req.params;
 
+    const brazilianNow = getBrazilianDate();
+
     const { data, error } = await supabase
       .from('rotas')
       .update({
@@ -201,7 +268,8 @@ export const cancelArrival = async (req, res) => {
         horario_chegada: null,
         tempo_espera: null,
         tempo_total_espera: null,
-        status: 'pendente' // <--- REVERTE STATUS NO BANCO
+        status: 'pendente', // REVERTE STATUS NO BANCO
+        updated_at: brazilianNow.toISOString()
       })
       .eq('id', id)
       .select()
@@ -232,9 +300,9 @@ export const finishDeliverySuccess = async (req, res) => {
       return res.status(400).json({ error: 'Nome de quem recebeu é obrigatório' });
     }
 
-    // Obter horário atual para saída
-    const now = new Date();
-    const horaSaida = now.toTimeString().split(' ')[0];
+    // Obter horário atual para saída em Brasília
+    const brazilianNow = getBrazilianDate();
+    const horaSaida = getBrazilianTimeString();
 
     const updates = {
       entregue: true,
@@ -243,7 +311,8 @@ export const finishDeliverySuccess = async (req, res) => {
       horario_saida: horaSaida,
       tempo_total_espera: tempo_espera_segundos || 0,
       motivo_nao_entrega: null,
-      status: 'entregue' // <--- ATUALIZA STATUS NO BANCO
+      status: 'entregue', // ATUALIZA STATUS NO BANCO
+      updated_at: brazilianNow.toISOString()
     };
 
     // Se forneceu tempo de espera em segundos, converte para intervalo PostgreSQL
@@ -268,6 +337,8 @@ export const finishDeliverySuccess = async (req, res) => {
 
     return res.json({
       message: 'Entrega finalizada com sucesso',
+      horario_saida: horaSaida,
+      horario_brasilia: horaSaida,
       rota: data
     });
   } catch (error) {
@@ -286,9 +357,9 @@ export const finishDeliveryFailure = async (req, res) => {
       return res.status(400).json({ error: 'Motivo da não entrega é obrigatório' });
     }
 
-    // Obter horário atual para saída
-    const now = new Date();
-    const horaSaida = now.toTimeString().split(' ')[0];
+    // Obter horário atual para saída em Brasília
+    const brazilianNow = getBrazilianDate();
+    const horaSaida = getBrazilianTimeString();
 
     const updates = {
       entregue: false,
@@ -297,7 +368,8 @@ export const finishDeliveryFailure = async (req, res) => {
       horario_saida: horaSaida,
       tempo_total_espera: tempo_espera_segundos || 0,
       quem_recebeu: null,
-      status: 'nao_entregue' // <--- ATUALIZA STATUS NO BANCO
+      status: 'nao_entregue', // ATUALIZA STATUS NO BANCO
+      updated_at: brazilianNow.toISOString()
     };
 
     // Se forneceu tempo de espera em segundos
@@ -322,6 +394,8 @@ export const finishDeliveryFailure = async (req, res) => {
 
     return res.json({
       message: 'Não entrega registrada',
+      horario_saida: horaSaida,
+      horario_brasilia: horaSaida,
       rota: data
     });
   } catch (error) {
@@ -340,10 +414,13 @@ export const updateWaitingTime = async (req, res) => {
       return res.status(400).json({ error: 'Tempo de espera é obrigatório' });
     }
 
+    const brazilianNow = getBrazilianDate();
+
     const { data, error } = await supabase
       .from('rotas')
       .update({
-        tempo_total_espera: tempo_espera_segundos
+        tempo_total_espera: tempo_espera_segundos,
+        updated_at: brazilianNow.toISOString()
       })
       .eq('id', id)
       .select()
@@ -370,11 +447,12 @@ export const getTodayStats = async (req, res) => {
   try {
     const { colaborador_id } = req.params;
     
-    const today = new Date().toISOString().split('T')[0];
+    // Usar data de Brasília
+    const today = getBrazilianDateString();
 
     const { data: rotas, error } = await supabase
       .from('rotas')
-      .select('entregue, motivo_nao_entrega, tempo_total_espera, horario_real')
+      .select('entregue, motivo_nao_entrega, tempo_total_espera, horario_real, created_at')
       .eq('colaborador_id', colaborador_id)
       .eq('data_entrega', today);
 
@@ -405,7 +483,33 @@ export const getTodayStats = async (req, res) => {
       em_espera: emEspera,
       pendentes,
       tempo_medio_espera_segundos: Math.round(tempoMedio),
-      progresso: total > 0 ? ((entregues + naoEntregues) / total) * 100 : 0
+      progresso: total > 0 ? ((entregues + naoEntregues) / total) * 100 : 0,
+      data_brasilia: today
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Erro no servidor' });
+  }
+};
+
+// ➤ Função para verificar o fuso horário atual do servidor e de Brasília
+export const getTimeInfo = async (req, res) => {
+  try {
+    const serverDate = new Date();
+    const brazilianDate = getBrazilianDate();
+    
+    return res.json({
+      servidor: {
+        data_utc: serverDate.toISOString(),
+        data_local: serverDate.toString(),
+        fuso_horario: Intl.DateTimeFormat().resolvedOptions().timeZone
+      },
+      brasilia: {
+        data_hora: brazilianDate.toString(),
+        data: getBrazilianDateString(),
+        hora: getBrazilianTimeString(),
+        fuso_horario: 'America/Sao_Paulo (BRT/BRST)'
+      }
     });
   } catch (error) {
     console.error(error);
