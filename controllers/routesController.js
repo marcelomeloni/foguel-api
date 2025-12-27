@@ -74,20 +74,25 @@ export const deleteRota = async (req, res) => {
 // ➤ Listar todas as Rotas
 export const getAllRotas = async (req, res) => {
   try {
-    // 1. Busca as rotas
+    // 1. Busca as rotas com TODOS os dados de endereço do cliente
     const { data: rawData, error } = await supabase
       .from('rotas')
       .select(`
         *,
         colaboradores ( nome ),
-        clientes ( nome, cidade )
+        clientes ( 
+            nome, 
+            cidade,
+            rua,      
+            numero,   
+            bairro    
+        )
       `)
       .order('data_entrega', { ascending: false });
 
     if (error) return res.status(400).json({ error });
 
     // 2. DATA DE HOJE (Fuso Horário BRASIL)
-    // Usamos string YYYY-MM-DD para garantir que a comparação seja exata no Brasil
     const todayBrazil = new Intl.DateTimeFormat('en-CA', { 
         timeZone: 'America/Sao_Paulo',
         year: 'numeric', month: '2-digit', day: '2-digit'
@@ -103,23 +108,25 @@ export const getAllRotas = async (req, res) => {
         ...route,
         motorista_nome: route.colaboradores?.nome || 'Sem Motorista',
         cliente_nome: route.clientes?.nome || 'Cliente Desconhecido',
+        
+        // Vamos passar o objeto cliente inteiro ou os campos separadamente
+        // O front-end vai usar isso para montar o endereço
+        rua: route.clientes?.rua,
+        numero: route.clientes?.numero,
+        bairro: route.clientes?.bairro,
         cidade: route.clientes?.cidade || '',
+        
         items_count: Array.isArray(route.produtos) ? route.produtos.length : 0
       };
 
-      // --- A CORREÇÃO MÁGICA ---
-      // Uma rota é considerada "Concluída" se qualquer uma dessas for verdade:
+      // --- LÓGICA DE SEPARAÇÃO (MANTIDA IGUAL) ---
       const isConcluido = 
-          route.entregue === true ||             // 1. O booleano diz que entregou
-          route.status === 'entregue' ||         // 2. O texto diz 'entregue'
-          route.status === 'nao_entregue' ||     // 3. Tentou mas falhou (já foi processada)
-          route.status === 'CONCLUIDO' ||        // 4. Status legado
-          route.status === 'cancelado';          // 5. Cancelada
+          route.entregue === true ||            
+          route.status === 'entregue' ||        
+          route.status === 'nao_entregue' ||    
+          route.status === 'CONCLUIDO' ||        
+          route.status === 'cancelado';          
 
-      // LÓGICA:
-      // Se a data é Hoje ou Futuro (Brasil) ... E ... Não está concluída:
-      // Vai para a lista de "A Fazer" (Future).
-      // Se já foi concluída (mesmo que seja hoje), vai para o Histórico.
       if (route.data_entrega >= todayBrazil && !isConcluido) {
         future.push(formattedRoute);
       } else {
@@ -128,11 +135,7 @@ export const getAllRotas = async (req, res) => {
     });
 
     // 4. Reordena
-    // Futuro: Do mais antigo para o mais novo (urgência)
     future.sort((a, b) => new Date(a.data_entrega) - new Date(b.data_entrega));
-    
-    // Histórico: Do mais recente para o mais antigo (log)
-    // history.sort((a, b) => new Date(b.data_entrega) - new Date(a.data_entrega)); // Opcional
 
     return res.json({ future, history });
 
@@ -261,4 +264,5 @@ export const getAnalyticsReport = async (req, res) => {
     console.error(error);
     return res.status(500).json({ error: 'Erro no servidor' });
   }
+
 }
