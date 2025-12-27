@@ -125,4 +125,46 @@ export const getRecentActivity = async (req, res) => {
     console.error('Erro ao buscar atividades:', error);
     return res.status(500).json({ error: 'Erro ao processar atividades' });
   }
+
+};
+
+export const getDashboardStats = async (req, res) => {
+  try {
+    // Pegar a data de hoje no formato YYYY-MM-DD
+    // Nota: Em produção, verifique se o fuso horário do servidor bate com o do Brasil
+    const today = new Date().toISOString().split('T')[0]; 
+
+    // Buscar todas as rotas de hoje
+    const { data: rotas, error } = await supabase
+      .from('rotas')
+      .select('status, entregue') // Trazemos apenas o necessário para contar
+      .eq('data_entrega', today);
+
+    if (error) throw error;
+
+    // Calcular estatísticas
+    const stats = {
+      totalEntregas: rotas.length,
+      concluidas: 0,
+      pendentes: 0,
+      ocorrencias: 0
+    };
+
+    rotas.forEach(rota => {
+      if (rota.status === 'entregue') {
+        stats.concluidas++;
+      } else if (rota.status === 'nao_entregue') {
+        stats.ocorrencias++;
+      } else {
+        // Consideramos 'pendente', 'em_rota', 'em_espera' como pendentes
+        stats.pendentes++;
+      }
+    });
+
+    return res.status(200).json(stats);
+
+  } catch (error) {
+    console.error('Erro ao buscar estatísticas:', error);
+    return res.status(500).json({ error: 'Erro ao calcular estatísticas' });
+  }
 };
