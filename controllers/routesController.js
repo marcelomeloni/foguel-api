@@ -177,6 +177,9 @@ export const getRecentDeliveries = async (req, res) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit) : 4;
 
+    // Pegamos a data de hoje no fuso do Brasil (YYYY-MM-DD)
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+
     const { data, error } = await supabase
       .from('rotas')
       .select(`
@@ -187,32 +190,26 @@ export const getRecentDeliveries = async (req, res) => {
         motivo_nao_entrega,
         clientes ( nome )
       `)
-      // REMOVEMOS o filtro .or(...) para permitir que rotas 'pendentes' apareçam na lista recente
+      // 1. Filtro: Somente o que já aconteceu (data <= hoje)
+      .lte('data_entrega', today)
+      // 2. Filtro: Somente o que foi FINALIZADO (Sucesso ou Falha)
+      // Removemos as 'pendentes' e 'em_espera'
+      .or('status.eq.entregue,status.eq.nao_entregue,entregue.eq.true')
       .order('data_entrega', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(limit);
 
     if (error) return res.status(400).json({ error });
 
-    // Lógica de mapeamento de status
     const formatted = data.map(item => {
-      let finalStatus = 'pending'; // Padrão
-
-      if (item.entregue || item.status === 'entregue') {
-        finalStatus = 'delivered';
-      } 
-      else if (item.status === 'nao_entregue' || (item.entregue === false && item.motivo_nao_entrega)) {
-        finalStatus = 'failed';
-      } 
-      else if (item.status === 'pendente' || item.status === 'em_espera') {
-        finalStatus = 'pending';
-      }
-
+      // Como filtramos acima, aqui só teremos 'delivered' ou 'failed'
+      const isDelivered = item.entregue || item.status === 'entregue';
+      
       return {
         id: item.id,
         client: item.clientes?.nome || 'Cliente Desconhecido',
         date: item.data_entrega,
-        status: finalStatus
+        status: isDelivered ? 'delivered' : 'failed'
       };
     });
 
@@ -280,4 +277,5 @@ export const getAnalyticsReport = async (req, res) => {
   }
 
 }
+
 
