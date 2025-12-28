@@ -24,6 +24,21 @@ const getBrazilianTimeString = () => {
   return `${hours}:${minutes}:${seconds}`;
 };
 
+const convertToBrazilianTime = (isoString) => {
+  if (!isoString) return null;
+  
+  const date = new Date(isoString);
+  const options = {
+    timeZone: 'America/Sao_Paulo',
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  };
+  
+  return date.toLocaleTimeString('pt-BR', options);
+};
+
 // ============== LISTAGEM DE ROTAS ==============
 
 export const getTodayDeliveries = async (req, res) => {
@@ -74,7 +89,8 @@ export const getTodayDeliveries = async (req, res) => {
           }
       }
 
-      const horario_real = rota.horario_real; // Retorna timestamp ISO completo
+      const horario_real = rota.horario_real ? 
+        convertToBrazilianTime(rota.horario_real) : null;
 
       return {
         id: rota.id,
@@ -95,7 +111,8 @@ export const getTodayDeliveries = async (req, res) => {
         quem_recebeu: rota.quem_recebeu,
         motivo_nao_entrega: rota.motivo_nao_entrega,
         horario_real: horario_real,
-        created_at: rota.created_at
+        created_at: rota.created_at ? 
+          convertToBrazilianTime(rota.created_at) : null
       };
     });
 
@@ -155,15 +172,14 @@ export const getDeliveryDetails = async (req, res) => {
       quem_recebeu: rota.quem_recebeu,
       motivo_nao_entrega: rota.motivo_nao_entrega,
       
-      // CAMPOS PARA TIMER - Retorna timestamps ISO completos
-      horario_real_timestamp: rota.horario_real, // Para cálculos no frontend
-      horario_real_display: rota.horario_real, // Para exibição (o frontend formata)
+      // Retorna horário e data separados para o frontend calcular
+      horario_real: rota.horario_real, // String HH:MM:SS
+      data_entrega: rota.data_entrega, // String YYYY-MM-DD
       
-      horario_chegada: rota.horario_chegada,
-      horario_saida: rota.horario_saida,
+      horario_chegada: rota.horario_chegada ? convertToBrazilianTime(rota.horario_chegada) : null,
+      horario_saida: rota.horario_saida ? convertToBrazilianTime(rota.horario_saida) : null,
       tempo_espera: rota.tempo_espera,
       tempo_total_espera: rota.tempo_total_espera,
-      data_entrega: rota.data_entrega,
       created_at: rota.created_at,
       sequence: rota.sequence || 0
     };
@@ -182,14 +198,13 @@ export const registerArrival = async (req, res) => {
   try {
     const { id } = req.params;
     
-    const now = new Date();
-    const isoTimestamp = now.toISOString();
+    const horaAtual = getBrazilianTimeString();
 
     const { data, error } = await supabase
       .from('rotas')
       .update({
-        horario_real: isoTimestamp,
-        horario_chegada: isoTimestamp,
+        horario_real: horaAtual,
+        horario_chegada: horaAtual,
         status: 'em_espera'
       })
       .eq('id', id)
@@ -205,7 +220,8 @@ export const registerArrival = async (req, res) => {
 
     return res.json({
       message: 'Chegada registrada com sucesso',
-      horario_real_timestamp: isoTimestamp,
+      horario_chegada: horaAtual,
+      horario_real: horaAtual,
       rota: data
     });
   } catch (error) {
@@ -257,14 +273,13 @@ export const finishDeliverySuccess = async (req, res) => {
       return res.status(400).json({ error: 'Nome de quem recebeu é obrigatório' });
     }
 
-    const now = new Date();
-    const isoTimestamp = now.toISOString();
+    const horaSaida = getBrazilianTimeString();
 
     const updates = {
       entregue: true,
       quem_recebeu,
       observacoes: observacoes || null,
-      horario_saida: isoTimestamp,
+      horario_saida: horaSaida,
       tempo_total_espera: tempo_espera_segundos || 0,
       motivo_nao_entrega: null,
       status: 'entregue'
@@ -291,7 +306,7 @@ export const finishDeliverySuccess = async (req, res) => {
 
     return res.json({
       message: 'Entrega finalizada com sucesso',
-      horario_saida: isoTimestamp,
+      horario_saida: horaSaida,
       rota: data
     });
   } catch (error) {
@@ -310,14 +325,13 @@ export const finishDeliveryFailure = async (req, res) => {
       return res.status(400).json({ error: 'Motivo da não entrega é obrigatório' });
     }
 
-    const now = new Date();
-    const isoTimestamp = now.toISOString();
+    const horaSaida = getBrazilianTimeString();
 
     const updates = {
       entregue: false,
       motivo_nao_entrega,
       observacoes: observacoes || null,
-      horario_saida: isoTimestamp,
+      horario_saida: horaSaida,
       tempo_total_espera: tempo_espera_segundos || 0,
       quem_recebeu: null,
       status: 'nao_entregue'
@@ -344,7 +358,7 @@ export const finishDeliveryFailure = async (req, res) => {
 
     return res.json({
       message: 'Não entrega registrada',
-      horario_saida: isoTimestamp,
+      horario_saida: horaSaida,
       rota: data
     });
   } catch (error) {
@@ -452,8 +466,7 @@ export const getTimeInfo = async (req, res) => {
         data_hora: brazilianDate.toString(),
         data: getBrazilianDateString(),
         hora: getBrazilianTimeString(),
-        fuso_horario: 'America/Sao_Paulo (BRT/BRST)',
-        iso_timestamp: brazilianDate.toISOString()
+        fuso_horario: 'America/Sao_Paulo (BRT/BRST)'
       }
     });
   } catch (error) {
