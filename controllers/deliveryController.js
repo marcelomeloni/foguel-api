@@ -131,7 +131,7 @@ export const getDeliveryDetails = async (req, res) => {
       return res.status(404).json({ error: 'Rota não encontrada' });
     }
 
-    // Calcular status visualmente
+    // Calcular status
     let status = rota.status || 'pendente';
     if (rota.entregue === true) {
       status = 'entregue';
@@ -141,7 +141,6 @@ export const getDeliveryDetails = async (req, res) => {
       status = 'em_espera';
     }
 
-    // Formatar endereço completo
     const enderecoCompleto = `${rota.clientes.rua}, ${rota.clientes.numero} - ${rota.clientes.bairro}, ${rota.clientes.cidade} - CEP ${rota.clientes.cep}`;
 
     const response = {
@@ -162,9 +161,18 @@ export const getDeliveryDetails = async (req, res) => {
       observacoes: rota.observacoes,
       quem_recebeu: rota.quem_recebeu,
       motivo_nao_entrega: rota.motivo_nao_entrega,
-      horario_real: rota.horario_real,
+      
+      // MUDANÇA PRINCIPAL: Retornar ISO timestamp completo
+      horario_real_timestamp: rota.horario_real, // Timestamp completo ISO
+      horario_real_display: rota.horario_real ? convertToBrazilianTime(rota.horario_real) : null, // Para exibição
+      
+      horario_chegada: rota.horario_chegada ? convertToBrazilianTime(rota.horario_chegada) : null,
+      horario_saida: rota.horario_saida ? convertToBrazilianTime(rota.horario_saida) : null,
       tempo_espera: rota.tempo_espera,
+      tempo_total_espera: rota.tempo_total_espera,
+      data_entrega: rota.data_entrega,
       created_at: rota.created_at,
+      updated_at: rota.updated_at,
       sequence: rota.sequence || 0
     };
 
@@ -174,7 +182,6 @@ export const getDeliveryDetails = async (req, res) => {
     return res.status(500).json({ error: 'Erro no servidor' });
   }
 };
-
 // ============== AÇÕES DE ENTREGA ==============
 
 // ➤ Registrar chegada no local
@@ -182,15 +189,17 @@ export const registerArrival = async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Obter horário atual em Brasília
-    const horaAtual = getBrazilianTimeString();
+    // Obter timestamp completo em ISO (UTC)
+    const now = new Date();
+    const isoTimestamp = now.toISOString();
 
     const { data, error } = await supabase
       .from('rotas')
       .update({
-        horario_real: horaAtual,
-        horario_chegada: horaAtual,
-        status: 'em_espera'
+        horario_real: isoTimestamp, // Salvar timestamp completo
+        horario_chegada: isoTimestamp,
+        status: 'em_espera',
+        updated_at: isoTimestamp
       })
       .eq('id', id)
       .select()
@@ -205,9 +214,8 @@ export const registerArrival = async (req, res) => {
 
     return res.json({
       message: 'Chegada registrada com sucesso',
-      horario_chegada: horaAtual,
-      horario_real: horaAtual,
-      horario_brasilia: horaAtual,
+      horario_real_timestamp: isoTimestamp,
+      horario_real_display: convertToBrazilianTime(isoTimestamp),
       rota: data
     });
   } catch (error) {
@@ -468,3 +476,4 @@ export const getTimeInfo = async (req, res) => {
     return res.status(500).json({ error: 'Erro no servidor' });
   }
 };
+
